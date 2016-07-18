@@ -10,14 +10,11 @@ class shareaholic_plugin extends Plugin
 	var $name = 'shareaholic';
 	var $code = 'evo_shareaholic';
 	var $priority = 50;
-	var $version = '1.0';
+	var $version = '1.5';
 	var $author = 'The b2evo Group';
 	var $group = 'rendering';
+    var $number_of_installs = 1;
 
-	var $plugin;
-
-	var $available_addons;
-	var $enabled_addon;
 
 	/**
 	 * Init
@@ -27,119 +24,83 @@ class shareaholic_plugin extends Plugin
 		$this->name = T_( 'Shareaholic Share' );
 		$this->short_desc = T_('Share contents to your favorite social networks using the Shareaholic service.');
 		$this->long_desc = T_('Share contents to your favorite social networks using the Shareaholic service.');
-
-		$this->available_addons = $this->get_available_addons(true); // Get the available addons and load their code
 	}
 
 
-	function get_available_addons( $load = false )
-	{
-		require_once('addons/pluginaddon.class.php');
-
-		$available_addons = array();
-
-		$dir = dirname(__FILE__) . '/addons';
-		$dir_content = scandir($dir);
-		
-		foreach ( $dir_content as $element )
-		{
-			$subdir_name = $dir . '/' . $element;
-
-			if ( is_dir($subdir_name) )
-			{
-				$filepath = $subdir_name . '/' . $element . '.class.php';
-				if ( is_file($filepath) )
-				{
-					$available_addons[] = array($element, ucfirst($element));
-
-					if ( $load )
-					{
-						require_once($filepath);
-					}
-				}
-			}
-		}
-
-		return $available_addons;
-	}
-
-	
 	function get_coll_setting_definitions( & $params )
 	{
-		$default_params = array_merge( $params, array(
-				'default_post_rendering' => 'opt-out'
-			) );
+		$default_params = array_merge(
+            $params,
+            array(
+                'default_post_rendering' => 'opt-out'
+            )
+        );
 
 		$plugin_settings = array(
-							'shareaholic_enabled' => array(
-									'label' => T_('Enabled'),
-									'type' => 'checkbox',
-									'note' => 'Is the plugin enabled for this collection?',
-								),
-							);
+            'shareaholic_enabled' => array(
+                    'label' => T_('Enabled'),
+                    'type' => 'checkbox',
+                    'note' => 'Is the plugin enabled for this collection?',
+                ),
+            'shareaholic_site_id' => array(
+                'label' => T_('Site ID'),
+                'size' => 70,
+                'defaultvalue' => '',
+                'note' => T_('The ID that you get from your social sharing service.'),
+            ),
+            'shareaholic_applocation_app_id' => array(
+                'label' => T_('Location APP ID'),
+                'size' => 70,
+                'defaultvalue' => '',
+                'note' => T_('The Id of the location created for your site in the Shareaholic\'s Dashboard. See documentation for details.'),
+            ),
+        );
 
-		return array_merge( $plugin_settings, socialshare_shareaholic::get_coll_setting_definitions(), parent::get_coll_setting_definitions( $default_params ) ); 
+		return array_merge( $plugin_settings, parent::get_coll_setting_definitions( $default_params ) );
 			
 	}
 
 
-	function call_method( $object, $method, & $params )
-	{
-		if( method_exists($object, $method) )
-		{
-			$object->$method( $params );
-		}
-	}
-
-
-	function get_coll_enabled_addon()
-	{
-		if( $this->status != 'enabled' )
-		{
-			return false;
-		}
-
-		global $Blog;
-
-		if( $this->get_coll_setting( 'shareaholic_enabled', $Blog ) )
-		{
-			$this->enabled_addon = new socialshare_shareaholic($this);
-
-			return true;
-		}
-	}
-
-
-	/** Plugin Hooks **/
 	function SkinBeginHtmlHead( & $params )
 	{
-		if ( $this->get_coll_enabled_addon( $params ) )
-		{ 	
-			$this->call_method( $this->enabled_addon, 'SkinBeginHtmlHead', $params );
-		}
+        global $Blog;
+
+        global $Blog;
+
+        if( $this->get_coll_setting('shareaholic_enabled', $Blog) ) {
+
+            $script = "
+//<![CDATA[
+  (function() {
+    var shr = document.createElement('script');
+    shr.setAttribute('data-cfasync', 'false');
+    shr.src = '//dsms0mj1bbhn4.cloudfront.net/assets/pub/shareaholic.js';
+    shr.type = 'text/javascript'; shr.async = 'true';
+    shr.onload = shr.onreadystatechange = function() {
+      var rs = this.readyState;
+      if (rs && rs != 'complete' && rs != 'loaded') return;
+      var site_id = '" . $this->get_coll_setting('shareaholic_site_id', $Blog) . "';
+      try { Shareaholic.init(site_id); } catch (e) {}
+    };
+    var s = document.getElementsByTagName('script')[0];
+    s.parentNode.insertBefore(shr, s);
+  })();
+//]]>";
+            add_js_headline($script);
+        }
 	}
 
 	function RenderItemAsHtml( & $params )
 	{
-		if ( $this->get_coll_enabled_addon( $params ) )
-		{
-			$this->call_method( $this->enabled_addon, 'RenderItemAsHtml', $params );
-		}
-	}
+        global $Blog;
 
-	function RenderItemAsXml ( & $params )
-	{
-		if ( $this->get_coll_enabled_addon( $params ) )
-		{
-			$this->call_method( $this->enabled_addon, 'RenderItemAsXml', $params );
-		}
-	}
+        if( $this->get_coll_setting('shareaholic_enabled', $Blog) && $this->get_coll_setting('shareaholic_applocation_app_id', $Blog) ) {
+            $content = & $params['data'];
 
-	function ColorboxInit( & $params )
-	{
-		if ( $this->get_coll_enabled_addon( $params ) )
-		{
-			$this->call_method( $this->enabled_addon, 'ColorboxInit', $params );
-		}
+            $content .= "\n"
+                .'<div class="shareaholic-canvas" data-app="share_buttons" data-app-id="' . $this->get_coll_setting('shareaholic_applocation_app_id', $Blog) . '"></div>'
+                ."\n";
+        }
+
 	}
 }
